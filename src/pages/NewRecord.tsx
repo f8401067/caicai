@@ -10,6 +10,10 @@ import { Ball } from '../components/common/Ball';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 
+/**
+ * 新增购彩记录页面
+ * 用户可手动选号或拍照识别，支持多注、倍投、多期、追加等选项
+ */
 export default function NewRecord() {
   const navigate = useNavigate();
   const { addRecord, drawHistory } = useAppStore();

@@ -10,6 +10,10 @@ import { Ball } from '../components/common/Ball';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 
+/**
+ * 号码编辑弹窗组件
+ * 用户可通过点击数字网格手动编辑某注的红球和蓝球号码
+ */
 function EditModal({
   bet,
   betIndex,
@@ -129,6 +133,11 @@ function EditModal({
 
 
 
+/**
+ * 扫码验奖页面
+ * 支持拍照/相册识别彩票号码，自动提取号码并与历史开奖结果比对
+ * 展示验奖结果（中奖/未中奖）
+ */
 export default function Scan() {
   const navigate = useNavigate();
   const [step, setStep] = useState<'scan' | 'result'>('scan');

@@ -8,6 +8,11 @@ import History from "./pages/History";
 import Stats from "./pages/Stats";
 import { TabBar } from "./components/layout/TabBar";
 
+/**
+ * 应用根组件
+ * 使用 React Router 管理路由，包含底部 Tab 导航栏
+ * 所有页面在深色背景下展示，底部保留 TabBar 空间
+ */
 function App() {
   return (
     <Router>

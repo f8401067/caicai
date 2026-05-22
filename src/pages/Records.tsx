@@ -8,8 +8,13 @@ import { Ball } from '../components/common/Ball';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 
+/** 状态筛选选项类型 */
 type FilterType = 'all' | 'pending' | 'won' | 'not_won';
 
+/**
+ * 购彩记录页面
+ * 展示用户录入的所有购彩记录，支持状态筛选和彩种筛选
+ */
 export default function Records() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<FilterType>('pending');

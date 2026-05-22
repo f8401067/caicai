@@ -8,6 +8,10 @@ import { Ball } from '../components/common/Ball';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 
+/**
+ * 验奖历史页面
+ * 展示所有通过扫码验奖的记录，包含每注的中奖详情和开奖号码
+ */
 export default function History() {
   const navigate = useNavigate();
   const { verifyRecords, clearVerifyRecords } = useAppStore();

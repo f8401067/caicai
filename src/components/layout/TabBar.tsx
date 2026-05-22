@@ -8,12 +8,17 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** 底部导航栏标签定义 */
 const tabs = [
-  { path: '/', icon: Trophy, label: '开奖' },
-  { path: '/records', icon: History, label: '购彩记录' },
-  { path: '/my', icon: User, label: '我的' }
+  { path: '/', icon: Trophy, label: '开奖' },       // 首页：开奖结果
+  { path: '/records', icon: History, label: '购彩记录' }, // 购彩记录
+  { path: '/my', icon: User, label: '我的' }          // 个人中心
 ];
 
+/**
+ * 底部 Tab 导航栏
+ * 固定在页面底部，三个主入口：开奖、购彩记录、我的
+ */
 export const TabBar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();

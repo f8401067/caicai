@@ -9,42 +9,47 @@ import {
   BallNumbers
 } from '../types';
 
+/**
+ * 全局应用状态接口
+ * 使用 Zustand + persist 中间件实现状态持久化（localStorage）
+ */
 interface AppStore {
-  // 当前选中的彩票类型
+  // ----- 当前选中的彩票类型 -----
   currentType: LotteryType;
   setCurrentType: (type: LotteryType) => void;
 
-  // 开奖结果
+  // ----- 开奖结果（最新一期） -----
+  // 不持久化，每次启动重新从 API 获取
   drawResults: Record<LotteryType, DrawResult | null>;
   setDrawResult: (type: LotteryType, result: DrawResult) => void;
   clearDrawResults: () => void;
 
-  // 历史开奖结果（多期）
+  // ----- 历史开奖结果（多期） -----
   drawHistory: Record<LotteryType, DrawResult[]>;
   addDrawHistory: (type: LotteryType, results: DrawResult[]) => void;
   prependDrawHistory: (type: LotteryType, result: DrawResult) => void;
 
-  // 购彩记录
+  // ----- 购彩记录 -----
   records: LotteryRecord[];
   addRecord: (record: Omit<LotteryRecord, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateRecord: (id: string, updates: Partial<LotteryRecord>) => void;
   deleteRecord: (id: string) => void;
   clearRecords: () => void;
 
-  // 验证历史
+  // ----- 验奖历史 -----
   verifyRecords: VerifyRecord[];
   addVerifyRecord: (record: Omit<VerifyRecord, 'id' | 'createdAt'>) => void;
   clearVerifyRecords: () => void;
 
-  // 用户设置
+  // ----- 用户设置 -----
   enabledTypes: LotteryType[];
   toggleLotteryType: (type: LotteryType) => void;
 
-  // OCR设置
+  // ----- OCR设置 -----
   ocrConfig: {
-    provider: 'tesseract' | 'baidu';
-    baiduApiKey: string;
-    baiduSecretKey: string;
+    provider: 'tesseract' | 'baidu';  // OCR 提供商
+    baiduApiKey: string;              // 百度 API Key
+    baiduSecretKey: string;           // 百度 Secret Key
   };
   setOcrConfig: (config: Partial<AppStore['ocrConfig']>) => void;
 }

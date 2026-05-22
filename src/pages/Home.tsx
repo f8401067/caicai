@@ -7,13 +7,18 @@ import { parseDrawNumbers, formatMoney } from '../utils/lottery';
 import { Ball } from '../components/common/Ball';
 import { Card } from '../components/common/Card';
 
+/** 开奖API密钥和配置 */
 const API_KEY = '1bca7536f3b29cc79f73a87730e712b7';
 const PAGE_SIZE = 30;
 const API_BASE_URL = '/api';
 
-// 已有的期号记录，用于判断是否需要更新
+/** 已拉取的期号记录（用于去重） */
 const fetchedIssues: Record<string, Set<string>> = {};
 
+/**
+ * 首页：开奖结果展示
+ * 显示各彩种的历史开奖结果，支持懒加载和刷新
+ */
 export default function Home() {
   const navigate = useNavigate();
   const [showSettings, setShowSettings] = useState(false);
@@ -37,6 +42,11 @@ export default function Home() {
   const displayHistory = history.slice(0, displayCount);
   const hasMore = history.length > displayCount;
 
+  /**
+   * 从API获取开奖历史数据
+   * @param page 页码
+   * @param forceRefresh 是否强制刷新（忽略已有缓存）
+   */
   const fetchHistory = async (page: number = 1, forceRefresh: boolean = false) => {
     // 初始化期号记录
     if (!fetchedIssues[currentType]) {

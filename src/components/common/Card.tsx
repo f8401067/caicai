@@ -6,12 +6,17 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Card 卡片容器组件属性 */
 interface CardProps {
   children: React.ReactNode;
   className?: string;
   onClick?: () => void;
 }
 
+/**
+ * 卡片容器组件
+ * 深色背景圆角卡片，支持点击交互和自定义样式
+ */
 export const Card: React.FC<CardProps> = ({ children, className, onClick }) => {
   return (
     <div

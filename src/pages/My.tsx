@@ -5,6 +5,11 @@ import { useAppStore } from '../store/useAppStore';
 import { Card } from '../components/common/Card';
 import { formatMoney } from '../utils/lottery';
 
+/**
+ * "我的"页面
+ * 展示个人统计数据：总花费、总中奖、盈亏、购彩记录数、验奖记录数
+ * 提供"验证历史"和"消费统计"两个入口
+ */
 export default function My() {
   const navigate = useNavigate();
   const { records, verifyRecords } = useAppStore();

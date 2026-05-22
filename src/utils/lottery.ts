@@ -1,5 +1,9 @@
 import { LotteryType, LOTTERY_CONFIGS, DrawResult, BallNumbers } from '../types';
 
+/**
+ * 格式化金额显示
+ * 1亿以上显示"亿"，1万以上显示"万"，否则显示数字本身
+ */
 export function formatMoney(amount: number | string): string {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (num >= 100000000) {
@@ -11,6 +15,7 @@ export function formatMoney(amount: number | string): string {
   return num.toLocaleString();
 }
 
+/** 格式化时间戳为 YYYY-MM-DD 格式 */
 export function formatDate(timestamp: number): string {
   const date = new Date(timestamp);
   const year = date.getFullYear();
@@ -19,6 +24,7 @@ export function formatDate(timestamp: number): string {
   return `${year}-${month}-${day}`;
 }
 
+/** 格式化时间戳为 YYYY-MM-DD HH:mm 格式 */
 export function formatDateTime(timestamp: number): string {
   const date = new Date(timestamp);
   const year = date.getFullYear();
@@ -29,6 +35,10 @@ export function formatDateTime(timestamp: number): string {
   return `${year}-${month}-${day} ${hour}:${minute}`;
 }
 
+/**
+ * 解析开奖结果中的号码字符串为 BallNumbers
+ * number 字段为红球（如 "01 02 03 04 05"），refernumber 为蓝球
+ */
 export function parseDrawNumbers(draw: DrawResult): BallNumbers {
   const redStr = draw.number.trim();
   const blueStr = draw.refernumber?.trim() || '';
@@ -39,6 +49,11 @@ export function parseDrawNumbers(draw: DrawResult): BallNumbers {
   return { red, blue };
 }
 
+/**
+ * 根据彩票类型生成一组随机号码
+ * 红球和蓝球分别从 1~max 的范围中不重复随机选取
+ * 结果按升序排序
+ */
 export function generateRandomNumbers(type: LotteryType): BallNumbers {
   const config = LOTTERY_CONFIGS[type];
   const red: number[] = [];
@@ -64,6 +79,12 @@ export function generateRandomNumbers(type: LotteryType): BallNumbers {
   return { red, blue };
 }
 
+/**
+ * 计算中奖等级
+ * 根据用户号码与开奖号码的红球/蓝球匹配数量，判断中奖等级和奖金
+ * 目前支持大乐透和双色球的中奖规则
+ * @returns 中奖等级信息（含等级编号、名称、奖金），未中奖返回 null
+ */
 export function calculatePrize(
   type: LotteryType,
   userNumbers: BallNumbers,
@@ -72,6 +93,7 @@ export function calculatePrize(
   const matchedRed = userNumbers.red.filter(n => drawNumbers.red.includes(n)).length;
   const matchedBlue = userNumbers.blue.filter(n => drawNumbers.blue.includes(n)).length;
 
+  // 大乐透中奖规则
   if (type === LotteryType.DALETOU) {
     if (matchedRed === 5 && matchedBlue === 2) return { level: 1, name: '一等奖', bonus: 10000000 };
     if (matchedRed === 5 && matchedBlue === 1) return { level: 2, name: '二等奖', bonus: 100000 };
@@ -85,7 +107,9 @@ export function calculatePrize(
     if (matchedRed === 3 && matchedBlue === 0) return { level: 9, name: '九等奖', bonus: 5 };
     if (matchedRed === 1 && matchedBlue === 2) return { level: 9, name: '九等奖', bonus: 5 };
     if (matchedRed === 0 && matchedBlue === 2) return { level: 9, name: '九等奖', bonus: 5 };
-  } else if (type === LotteryType.SHUANGSEQIU) {
+  }
+  // 双色球中奖规则
+  else if (type === LotteryType.SHUANGSEQIU) {
     if (matchedRed === 6 && matchedBlue === 1) return { level: 1, name: '一等奖', bonus: 5000000 };
     if (matchedRed === 6 && matchedBlue === 0) return { level: 2, name: '二等奖', bonus: 100000 };
     if (matchedRed === 5 && matchedBlue === 1) return { level: 3, name: '三等奖', bonus: 3000 };

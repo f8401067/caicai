@@ -5,8 +5,14 @@ import { useAppStore } from '../store/useAppStore';
 import { formatMoney } from '../utils/lottery';
 import { Card } from '../components/common/Card';
 
+/** 统计周期类型 */
 type Period = 'month' | 'year';
 
+/**
+ * 消费统计页面
+ * 按月展示购彩花费、中奖和盈亏情况
+ * 包含日历热力图，直观显示每日消费
+ */
 export default function Stats() {
   const navigate = useNavigate();
   const [period, setPeriod] = useState<Period>('month');
