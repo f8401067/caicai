@@ -1,3 +1,5 @@
+import { API_CONFIG } from './apiConfig';
+
 /** 百度 OCR API 配置参数 */
 export interface BaiduOcrConfig {
   apiKey: string;
@@ -27,7 +29,7 @@ async function getAccessToken(config: BaiduOcrConfig): Promise<string> {
     return cachedToken;
   }
 
-  const url = `/baidu-oauth/oauth/2.0/token?grant_type=client_credentials&client_id=${config.apiKey}&client_secret=${config.secretKey}`;
+  const url = `${API_CONFIG.baiduOcr.oauthUrl}/oauth/2.0/token?grant_type=client_credentials&client_id=${config.apiKey}&client_secret=${config.secretKey}`;
   const res = await fetch(url, { method: 'POST' });
   const data = await res.json();
 
@@ -51,7 +53,7 @@ export async function baiduOcrRecognize(
   config: BaiduOcrConfig
 ): Promise<string> {
   const token = await getAccessToken(config);
-  const url = `/baidu-ocr/rest/2.0/ocr/v1/general_basic?access_token=${token}`;
+  const url = `${API_CONFIG.baiduOcr.apiUrl}/rest/2.0/ocr/v1/general_basic?access_token=${token}`;
 
   const formData = new URLSearchParams();
   formData.append('image', imageBase64);

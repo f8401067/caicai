@@ -55,6 +55,13 @@ export interface VerifyRecord {
   createdAt: number;                 // 创建时间戳
 }
 
+/** 中奖地区信息 */
+export interface WinnerRegion {
+  province: string;      // 省份
+  city?: string;         // 城市（福彩有，体彩可能没有）
+  count: number;         // 中奖注数
+}
+
 /** 开奖结果中的奖项信息 */
 export interface Prize {
   name: string;         // 奖项名称（如"一等奖"）
@@ -62,6 +69,7 @@ export interface Prize {
   singlebonus: number;  // 单注奖金（元）
   require?: string;     // 中奖条件
   addAmount?: number;   // 追加奖金
+  regions?: WinnerRegion[]; // 中奖地区分布
 }
 
 /** 开奖结果数据（来自开奖API） */

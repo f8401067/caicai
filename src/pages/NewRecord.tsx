@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { ChevronLeft, Camera } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
@@ -16,7 +16,7 @@ import { Button } from '../components/common/Button';
  */
 export default function NewRecord() {
   const navigate = useNavigate();
-  const { addRecord, drawHistory } = useAppStore();
+  const { addRecord, drawHistory, enabledTypes, currentType } = useAppStore();
 
   // 根据开奖记录自动计算下一期
   const getNextIssue = (): string => {
@@ -26,7 +26,17 @@ export default function NewRecord() {
     return String(maxIssue + 1);
   };
 
-  const [selectedType, setSelectedType] = useState<LotteryType>(LotteryType.DALETOU);
+  const [selectedType, setSelectedType] = useState<LotteryType>(currentType);
+
+  // 确保 selectedType 始终在 enabledTypes 中
+  useEffect(() => {
+    if (enabledTypes.length > 0 && !enabledTypes.includes(selectedType)) {
+      setSelectedType(enabledTypes[0]);
+      setNotes([{ red: [], blue: [] }]);
+      setCurrentNoteIndex(0);
+      setDrawerOpen(false);
+    }
+  }, [enabledTypes, selectedType]);
   const [currentNoteIndex, setCurrentNoteIndex] = useState(0);
   const [notes, setNotes] = useState<BallNumbers[]>([{ red: [], blue: [] }]);
   const [multiples, setMultiples] = useState(1);
@@ -237,22 +247,25 @@ export default function NewRecord() {
 
       <div className="p-3">
         <div className="flex gap-1.5 overflow-x-auto pb-1.5">
-          {Object.values(LOTTERY_CONFIGS).slice(0, 4).map((c) => (
-            <button
-              key={c.type}
-              onClick={() => {
-                setSelectedType(c.type);
-                setNotes([{ red: [], blue: [] }]);
-                setCurrentNoteIndex(0);
-                setDrawerOpen(false);
-              }}
-              className={`px-3 py-1.5 rounded-lg whitespace-nowrap text-sm transition-colors ${
-                selectedType === c.type ? 'bg-amber-500 text-black font-semibold' : 'bg-gray-700 text-white hover:bg-gray-600'
-              }`}
-            >
-              {c.name}
-            </button>
-          ))}
+          {enabledTypes.map((type) => {
+            const c = LOTTERY_CONFIGS[type];
+            return (
+              <button
+                key={c.type}
+                onClick={() => {
+                  setSelectedType(c.type);
+                  setNotes([{ red: [], blue: [] }]);
+                  setCurrentNoteIndex(0);
+                  setDrawerOpen(false);
+                }}
+                className={`px-3 py-1.5 rounded-lg whitespace-nowrap text-sm transition-colors ${
+                  selectedType === c.type ? 'bg-amber-500 text-black font-semibold' : 'bg-gray-700 text-white hover:bg-gray-600'
+                }`}
+              >
+                {c.name}
+              </button>
+            );
+          })}
         </div>
       </div>
 

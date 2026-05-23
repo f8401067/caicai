@@ -4,13 +4,15 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { LotteryType, LOTTERY_CONFIGS, DrawResult } from '../types';
 import { parseDrawNumbers, formatMoney } from '../utils/lottery';
+import { fetchLotteryRegions } from '../utils/lotteryDetail';
 import { Ball } from '../components/common/Ball';
 import { Card } from '../components/common/Card';
+import { API_CONFIG } from '../utils/apiConfig';
 
 /** 开奖API密钥和配置 */
 const API_KEY = '1bca7536f3b29cc79f73a87730e712b7';
 const PAGE_SIZE = 30;
-const API_BASE_URL = '/api';
+const API_BASE_URL = API_CONFIG.lottery.baseUrl;
 
 /** 已拉取的期号记录（用于去重） */
 const fetchedIssues: Record<string, Set<string>> = {};
@@ -117,6 +119,19 @@ export default function Home() {
           listData.forEach((r: DrawResult) => {
             fetchedIssues[currentType]?.add(r.issueno);
           });
+          
+          // 获取最新一期的中奖地区信息
+          if (listData[0]) {
+            try {
+              listData[0].prize = await fetchLotteryRegions(
+                currentType,
+                listData[0].issueno,
+                listData[0].prize
+              );
+            } catch (e) {
+              console.error('获取中奖地区信息失败:', e);
+            }
+          }
           
           // 如果是强制刷新，保留所有数据，把新数据放在前面
           const mergedData = [...listData];
@@ -279,30 +294,52 @@ export default function Home() {
                     </div>
 
                     {result.totalmoney && (
-                      <div className="flex justify-between items-center mt-1.5 pt-1.5 border-t border-gray-700">
-                        <div className="flex gap-3">
-                          <div className="text-center">
-                            <p className="text-xs text-gray-400">奖池</p>
-                            <p className="text-xs font-bold text-amber-500">
-                              {formatMoney(result.totalmoney)}
-                            </p>
+                      <div className="mt-1.5 pt-1.5 border-t border-gray-700 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <div className="flex gap-3">
+                            <div className="text-center">
+                              <p className="text-xs text-gray-400">奖池</p>
+                              <p className="text-xs font-bold text-amber-500">
+                                {formatMoney(result.totalmoney)}
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-gray-400">销量</p>
+                              <p className="text-xs font-bold text-blue-400">
+                                {result.saleamount ? formatMoney(result.saleamount) : '-'}
+                              </p>
+                            </div>
                           </div>
-                          <div className="text-center">
-                            <p className="text-xs text-gray-400">销量</p>
-                            <p className="text-xs font-bold text-blue-400">
-                              {result.saleamount ? formatMoney(result.saleamount) : '-'}
-                            </p>
-                          </div>
+                          {result.prize && result.prize[0] && (
+                            <div className="text-right">
+                              <p className="text-xs text-gray-400">{result.prize[0].name}</p>
+                              <p className="text-xs font-bold text-green-400">
+                                {result.prize[0].num > 0 
+                                  ? `${result.prize[0].num}注 · ￥${formatMoney(result.prize[0].singlebonus)}/注`
+                                  : '无人中奖'
+                                }
+                              </p>
+                            </div>
+                          )}
                         </div>
-                        {result.prize && result.prize[0] && (
-                          <div className="text-right">
-                            <p className="text-xs text-gray-400">{result.prize[0].name}</p>
-                            <p className="text-xs font-bold text-green-400">
-                              {result.prize[0].num > 0 
-                                ? `${result.prize[0].num}注 · ￥${formatMoney(result.prize[0].singlebonus)}/注`
-                                : '无人中奖'
-                              }
-                            </p>
+                        
+                        {/* 中奖地区信息 */}
+                        {isLatest && result.prize && (
+                          <div className="space-y-1">
+                            {result.prize.slice(0, 2).map((prize, idx) => (
+                              prize.regions && prize.regions.length > 0 && (
+                                <div key={idx} className="text-xs">
+                                  <span className="text-gray-400">{prize.name}：</span>
+                                  <span className="text-amber-400">
+                                    {prize.regions.map(region => 
+                                      region.city 
+                                        ? `${region.city}（${region.province}）` 
+                                        : region.province
+                                    ).join('、')}
+                                  </span>
+                                </div>
+                              )
+                            ))}
                           </div>
                         )}
                       </div>

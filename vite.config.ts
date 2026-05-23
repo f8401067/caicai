@@ -25,6 +25,16 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/baidu-ocr/, ''),
       },
+      '/lottery-gov': {
+        target: 'https://www.lottery.gov.cn',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/lottery-gov/, ''),
+      },
+      '/cwl-gov': {
+        target: 'https://www.cwl.gov.cn',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/cwl-gov/, ''),
+      },
     },
   },
   plugins: [

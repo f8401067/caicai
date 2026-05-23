@@ -1,12 +1,22 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Trash2, Trophy, Calendar, Clock, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { LotteryRecord, LotteryType, LOTTERY_CONFIGS } from '../types';
+import { LotteryRecord, LotteryType, LOTTERY_CONFIGS, BallNumbers } from '../types';
 import { formatDate, formatMoney, parseDrawNumbers, calculatePrize } from '../utils/lottery';
 import { Ball } from '../components/common/Ball';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
+
+/** 匹配结果接口 */
+interface MatchResult {
+  drawResult: import('../types').DrawResult;
+  matchedRed: number[];
+  matchedBlue: number[];
+  unmatchedRed: number[];
+  unmatchedBlue: number[];
+  prize: { level: number; name: string; bonus: number } | null;
+}
 
 /** 状态筛选选项类型 */
 type FilterType = 'all' | 'pending' | 'won' | 'not_won';
@@ -30,7 +40,88 @@ export default function Records() {
     { value: 'not_won', label: '未中奖' },
   ];
 
-  const { records, deleteRecord, drawResults } = useAppStore();
+  const { records, deleteRecord, drawHistory, updateRecord } = useAppStore();
+
+  /** 匹配结果缓存 */
+  const [matchResults, setMatchResults] = useState<Record<string, MatchResult[]>>({});
+
+  /** 号码匹配函数 */
+  const matchNumbers = (
+    type: LotteryType,
+    userNumbers: BallNumbers,
+    drawResult: import('../types').DrawResult
+  ): MatchResult => {
+    const drawNumbers = parseDrawNumbers(drawResult);
+    const prize = calculatePrize(type, userNumbers, drawNumbers);
+    
+    const matchedRed = userNumbers.red.filter(n => drawNumbers.red.includes(n));
+    const matchedBlue = userNumbers.blue.filter(n => drawNumbers.blue.includes(n));
+    const unmatchedRed = userNumbers.red.filter(n => !drawNumbers.red.includes(n));
+    const unmatchedBlue = userNumbers.blue.filter(n => !drawNumbers.blue.includes(n));
+    
+    return {
+      drawResult,
+      matchedRed,
+      matchedBlue,
+      unmatchedRed,
+      unmatchedBlue,
+      prize
+    };
+  };
+
+  /** 自动匹配所有记录 */
+  useEffect(() => {
+    const newMatchResults: Record<string, MatchResult[]> = {};
+    let hasUpdates = false;
+
+    records.forEach(record => {
+      const allBets = record.bets || [{ numbers: record.numbers }];
+      const recordMatchResults: MatchResult[] = [];
+      
+      allBets.forEach((bet, betIndex) => {
+        // 如果该注已经有匹配结果且状态不是pending，跳过
+        if (matchResults[record.id] && matchResults[record.id][betIndex] && record.status !== 'pending') {
+          recordMatchResults.push(matchResults[record.id][betIndex]);
+          return;
+        }
+
+        // 在历史开奖记录中查找对应期号
+        const history = drawHistory[record.type] || [];
+        const drawResult = history.find(r => {
+          // 处理多期票
+          const baseIssue = parseInt(record.issue, 10);
+          const targetIssue = String(baseIssue + betIndex);
+          return r.issueno === targetIssue;
+        });
+
+        if (drawResult) {
+          // 找到了对应的开奖记录，进行匹配
+          const matchResult = matchNumbers(record.type, bet.numbers, drawResult);
+          recordMatchResults.push(matchResult);
+          
+          // 如果是待开奖状态，更新为已开奖状态
+          if (record.status === 'pending') {
+            hasUpdates = true;
+            const wonAmount = matchResult.prize 
+              ? matchResult.prize.bonus * record.multiples 
+              : 0;
+            
+            updateRecord(record.id, {
+              status: wonAmount > 0 ? 'won' : 'not_won',
+              wonAmount: wonAmount > 0 ? wonAmount : undefined
+            });
+          }
+        }
+      });
+
+      newMatchResults[record.id] = recordMatchResults;
+    });
+
+    // 只有在有更新时才重新设置
+    if (hasUpdates || Object.keys(newMatchResults).length > 0) {
+      setMatchResults(newMatchResults);
+    }
+  }, [records, drawHistory]);
 
   // 记录中出现的彩种
   const availableTypes = useMemo(() => {
@@ -76,18 +167,23 @@ export default function Records() {
     return result;
   }, [expandedRecords, filter, typeFilter]);
 
-  const getPrizeInfo = (record: LotteryRecord) => {
-    const drawResult = drawResults[record.type];
-    if (!drawResult) return null;
+  const getMatchResult = (record: LotteryRecord, betIndex: number = 0): MatchResult | null => {
+    const results = matchResults[record.id];
+    return results && results[betIndex] ? results[betIndex] : null;
+  };
+
+  const getTotalPrize = (record: LotteryRecord) => {
+    const results = matchResults[record.id];
+    if (!results || results.length === 0) return null;
     
-    // Check all bets for prize
-    const allBets = record.bets || [{ numbers: record.numbers }];
-    const prizes = allBets.map(bet => {
-      const drawNumbers = parseDrawNumbers(drawResult);
-      return calculatePrize(record.type, bet.numbers, drawNumbers);
-    }).filter(Boolean);
+    const wonAmount = results.reduce((total, result) => {
+      if (result.prize) {
+        return total + result.prize.bonus * record.multiples;
+      }
+      return total;
+    }, 0);
     
-    return prizes.length > 0 ? prizes : null;
+    return wonAmount > 0 ? wonAmount : null;
   };
 
   const getStatusColor = (status: string) => {
@@ -195,7 +291,8 @@ export default function Records() {
         filteredRecords.map(({ record, displayIssue, displayAmount, periodIndex }) => {
           const statusInfo = getStatusColor(record.status);
           const StatusIcon = statusInfo.icon;
-          const prizeInfo = getPrizeInfo(record);
+          const totalPrize = getTotalPrize(record);
+          const matchResult = getMatchResult(record, periodIndex);
           const config = LOTTERY_CONFIGS[record.type];
 
           return (
@@ -243,20 +340,59 @@ export default function Records() {
               </div>
 
               {/* 显示所有注 */}
-              {(record.bets || [{ numbers: record.numbers }]).map((bet, betIdx) => (
-                <div key={betIdx} className={`flex gap-1.5 flex-wrap items-center justify-center py-1.5 ${betIdx > 0 ? 'border-t border-gray-700/50' : ''}`}>
-                  <span className="text-xs text-gray-500 mr-1">第{betIdx + 1}注</span>
-                  {bet.numbers.red.map((num, i) => (
-                    <Ball key={`r-${betIdx}-${i}`} number={num} type="red" size="md" matched={true} />
-                  ))}
-                  {bet.numbers.blue.length > 0 && (
-                    <div className="w-px h-4 bg-gray-600 mx-0.5" />
-                  )}
-                  {bet.numbers.blue.map((num, i) => (
-                    <Ball key={`b-${betIdx}-${i}`} number={num} type="blue" size="md" matched={true} />
-                  ))}
-                </div>
-              ))}
+              {(record.bets || [{ numbers: record.numbers }]).map((bet, betIdx) => {
+                const singleMatchResult = getMatchResult(record, betIdx);
+                const isMatched = singleMatchResult !== null;
+                
+                return (
+                  <div key={betIdx} className={`flex gap-1.5 flex-wrap items-center justify-center py-1.5 ${betIdx > 0 ? 'border-t border-gray-700/50' : ''}`}>
+                    <span className="text-xs text-gray-500 mr-1">第{betIdx + 1}注</span>
+                    
+                    {/* 红球 */}
+                    {isMatched ? (
+                      <>
+                        {singleMatchResult.matchedRed.map((num) => (
+                          <Ball key={`mr-${betIdx}-${num}`} number={num} type="red" size="md" matched={true} />
+                        ))}
+                        {singleMatchResult.unmatchedRed.map((num) => (
+                          <Ball key={`ur-${betIdx}-${num}`} number={num} type="red" size="md" matched={false} />
+                        ))}
+                      </>
+                    ) : (
+                      bet.numbers.red.map((num, i) => (
+                        <Ball key={`r-${betIdx}-${i}`} number={num} type="red" size="md" matched={true} />
+                      ))
+                    )}
+                    
+                    {bet.numbers.blue.length > 0 && (
+                      <div className="w-px h-4 bg-gray-600 mx-0.5" />
+                    )}
+                    
+                    {/* 蓝球 */}
+                    {isMatched && bet.numbers.blue.length > 0 ? (
+                      <>
+                        {singleMatchResult.matchedBlue.map((num) => (
+                          <Ball key={`mb-${betIdx}-${num}`} number={num} type="blue" size="md" matched={true} />
+                        ))}
+                        {singleMatchResult.unmatchedBlue.map((num) => (
+                          <Ball key={`ub-${betIdx}-${num}`} number={num} type="blue" size="md" matched={false} />
+                        ))}
+                      </>
+                    ) : (
+                      bet.numbers.blue.map((num, i) => (
+                        <Ball key={`b-${betIdx}-${i}`} number={num} type="blue" size="md" matched={true} />
+                      ))
+                    )}
+                    
+                    {/* 显示中奖等级 */}
+                    {isMatched && singleMatchResult.prize && (
+                      <span className="ml-2 text-xs font-medium text-amber-400">
+                        {singleMatchResult.prize.name}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
 
               <div className="flex justify-between items-center text-xs pt-2 border-t border-gray-700">
                 <div className="flex gap-2">
@@ -273,9 +409,9 @@ export default function Records() {
                       +¥{formatMoney(record.wonAmount / record.issues)}
                     </p>
                   )}
-                  {prizeInfo && !record.wonAmount && (
+                  {totalPrize && !record.wonAmount && (
                     <p className="text-amber-400 font-medium">
-                      {(prizeInfo as unknown as Array<{name: string}>).length}注中奖
+                      {(matchResults[record.id] || []).filter(r => r.prize).length}注中奖
                     </p>
                   )}
                 </div>
