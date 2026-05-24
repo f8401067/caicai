@@ -27,7 +27,7 @@ type FilterType = 'all' | 'pending' | 'won' | 'not_won';
  */
 export default function Records() {
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<FilterType>('pending');
+  const [filter, setFilter] = useState<FilterType>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | LotteryType>('all');
   const [statusOpen, setStatusOpen] = useState(false);
   const [typeOpen, setTypeOpen] = useState(false);
@@ -42,8 +42,8 @@ export default function Records() {
 
   const { records, deleteRecord, drawHistory, updateRecord } = useAppStore();
 
-  /** 匹配结果缓存 */
-  const [matchResults, setMatchResults] = useState<Record<string, MatchResult[]>>({});
+  /** 匹配结果缓存 - 结构为 [periodIndex][betIndex] */
+  const [matchResults, setMatchResults] = useState<Record<string, MatchResult[][]>>({});
 
   /** 号码匹配函数 */
   const matchNumbers = (
@@ -71,50 +71,64 @@ export default function Records() {
 
   /** 自动匹配所有记录 */
   useEffect(() => {
-    const newMatchResults: Record<string, MatchResult[]> = {};
+    const newMatchResults: Record<string, MatchResult[][]> = {};
     let hasUpdates = false;
 
     records.forEach(record => {
       const allBets = record.bets || [{ numbers: record.numbers }];
-      const recordMatchResults: MatchResult[] = [];
+      const recordMatchResults: MatchResult[][] = [];
       
-      allBets.forEach((bet, betIndex) => {
-        // 如果该注已经有匹配结果且状态不是pending，跳过
-        if (matchResults[record.id] && matchResults[record.id][betIndex] && record.status !== 'pending') {
-          recordMatchResults.push(matchResults[record.id][betIndex]);
-          return;
-        }
-
-        // 在历史开奖记录中查找对应期号
+      // 处理多期
+      for (let periodIdx = 0; periodIdx < record.issues; periodIdx++) {
+        const periodBetsResults: MatchResult[] = [];
+        
+        // 计算当前期号
+        const baseIssue = parseInt(record.issue, 10);
+        const targetIssue = String(baseIssue + periodIdx);
+        
+        // 查找当前期的开奖结果
         const history = drawHistory[record.type] || [];
-        const drawResult = history.find(r => {
-          // 处理多期票
-          const baseIssue = parseInt(record.issue, 10);
-          const targetIssue = String(baseIssue + betIndex);
-          return r.issueno === targetIssue;
-        });
-
-        if (drawResult) {
-          // 找到了对应的开奖记录，进行匹配
-          const matchResult = matchNumbers(record.type, bet.numbers, drawResult);
-          recordMatchResults.push(matchResult);
-          
-          // 如果是待开奖状态，更新为已开奖状态
-          if (record.status === 'pending') {
-            hasUpdates = true;
-            const wonAmount = matchResult.prize 
-              ? matchResult.prize.bonus * record.multiples 
-              : 0;
-            
-            updateRecord(record.id, {
-              status: wonAmount > 0 ? 'won' : 'not_won',
-              wonAmount: wonAmount > 0 ? wonAmount : undefined
-            });
+        const drawResult = history.find(r => r.issueno === targetIssue);
+        
+        // 对每注进行匹配
+        allBets.forEach((bet, betIndex) => {
+          if (drawResult) {
+            // 找到了对应的开奖记录，进行匹配
+            const matchResult = matchNumbers(record.type, bet.numbers, drawResult);
+            periodBetsResults.push(matchResult);
+          } else if (matchResults[record.id] && matchResults[record.id][periodIdx] && matchResults[record.id][periodIdx][betIndex]) {
+            // 使用已有的匹配结果
+            periodBetsResults.push(matchResults[record.id][periodIdx][betIndex]);
           }
-        }
-      });
+        });
+        
+        recordMatchResults.push(periodBetsResults);
+      }
 
       newMatchResults[record.id] = recordMatchResults;
+      
+      // 更新记录状态
+      if (record.status === 'pending') {
+        const hasDrawResult = recordMatchResults.some(period => period.some(match => match !== null));
+        if (hasDrawResult) {
+          hasUpdates = true;
+          
+          // 计算总中奖金额
+          let totalWonAmount = 0;
+          recordMatchResults.forEach(period => {
+            period.forEach(match => {
+              if (match?.prize) {
+                totalWonAmount += match.prize.bonus * record.multiples;
+              }
+            });
+          });
+          
+          updateRecord(record.id, {
+            status: totalWonAmount > 0 ? 'won' : 'not_won',
+            wonAmount: totalWonAmount > 0 ? totalWonAmount : undefined
+          });
+        }
+      }
     });
 
     // 只有在有更新时才重新设置
@@ -167,21 +181,24 @@ export default function Records() {
     return result;
   }, [expandedRecords, filter, typeFilter]);
 
-  const getMatchResult = (record: LotteryRecord, betIndex: number = 0): MatchResult | null => {
-    const results = matchResults[record.id];
-    return results && results[betIndex] ? results[betIndex] : null;
+  const getMatchResult = (record: LotteryRecord, periodIndex: number, betIndex: number): MatchResult | null => {
+    const periods = matchResults[record.id];
+    if (!periods || !periods[periodIndex]) return null;
+    return periods[periodIndex][betIndex] || null;
   };
 
   const getTotalPrize = (record: LotteryRecord) => {
-    const results = matchResults[record.id];
-    if (!results || results.length === 0) return null;
+    const periods = matchResults[record.id];
+    if (!periods || periods.length === 0) return null;
     
-    const wonAmount = results.reduce((total, result) => {
-      if (result.prize) {
-        return total + result.prize.bonus * record.multiples;
-      }
-      return total;
-    }, 0);
+    let wonAmount = 0;
+    periods.forEach(period => {
+      period.forEach(result => {
+        if (result?.prize) {
+          wonAmount += result.prize.bonus * record.multiples;
+        }
+      });
+    });
     
     return wonAmount > 0 ? wonAmount : null;
   };
@@ -292,7 +309,8 @@ export default function Records() {
           const statusInfo = getStatusColor(record.status);
           const StatusIcon = statusInfo.icon;
           const totalPrize = getTotalPrize(record);
-          const matchResult = getMatchResult(record, periodIndex);
+          // 获取第一注的匹配结果来显示开奖号码（因为同一期所有注的开奖号码相同）
+          const firstBetMatchResult = getMatchResult(record, periodIndex, 0);
           const config = LOTTERY_CONFIGS[record.type];
 
           return (
@@ -341,60 +359,95 @@ export default function Records() {
 
               {/* 显示所有注 */}
               {(record.bets || [{ numbers: record.numbers }]).map((bet, betIdx) => {
-                const singleMatchResult = getMatchResult(record, betIdx);
+                const singleMatchResult = getMatchResult(record, periodIndex, betIdx);
                 const isMatched = singleMatchResult !== null;
                 
                 return (
-                  <div key={betIdx} className={`flex gap-1.5 flex-wrap items-center justify-center py-1.5 ${betIdx > 0 ? 'border-t border-gray-700/50' : ''}`}>
-                    <span className="text-xs text-gray-500 mr-1">第{betIdx + 1}注</span>
+                  <div key={betIdx} className={`py-1.5 ${betIdx > 0 ? 'border-t border-gray-700/50' : ''}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-gray-500">第{betIdx + 1}注</span>
+                      
+                      {/* 显示中奖等级和奖金 */}
+                      {isMatched && singleMatchResult?.prize && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs font-medium text-amber-400">
+                            {singleMatchResult.prize.name}
+                          </span>
+                          <span className="text-xs font-bold text-green-400">
+                            +¥{(singleMatchResult.prize.bonus * record.multiples).toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                     
-                    {/* 红球 */}
-                    {isMatched ? (
-                      <>
-                        {singleMatchResult.matchedRed.map((num) => (
-                          <Ball key={`mr-${betIdx}-${num}`} number={num} type="red" size="md" matched={true} />
-                        ))}
-                        {singleMatchResult.unmatchedRed.map((num) => (
-                          <Ball key={`ur-${betIdx}-${num}`} number={num} type="red" size="md" matched={false} />
-                        ))}
-                      </>
-                    ) : (
-                      bet.numbers.red.map((num, i) => (
-                        <Ball key={`r-${betIdx}-${i}`} number={num} type="red" size="md" matched={true} />
-                      ))
-                    )}
-                    
-                    {bet.numbers.blue.length > 0 && (
-                      <div className="w-px h-4 bg-gray-600 mx-0.5" />
-                    )}
-                    
-                    {/* 蓝球 */}
-                    {isMatched && bet.numbers.blue.length > 0 ? (
-                      <>
-                        {singleMatchResult.matchedBlue.map((num) => (
-                          <Ball key={`mb-${betIdx}-${num}`} number={num} type="blue" size="md" matched={true} />
-                        ))}
-                        {singleMatchResult.unmatchedBlue.map((num) => (
-                          <Ball key={`ub-${betIdx}-${num}`} number={num} type="blue" size="md" matched={false} />
-                        ))}
-                      </>
-                    ) : (
-                      bet.numbers.blue.map((num, i) => (
-                        <Ball key={`b-${betIdx}-${i}`} number={num} type="blue" size="md" matched={true} />
-                      ))
-                    )}
-                    
-                    {/* 显示中奖等级 */}
-                    {isMatched && singleMatchResult.prize && (
-                      <span className="ml-2 text-xs font-medium text-amber-400">
-                        {singleMatchResult.prize.name}
-                      </span>
-                    )}
+                    <div className="flex gap-1.5 flex-wrap items-center justify-center">
+                      {/* 红球 */}
+                      {isMatched ? (
+                        <>
+                          {bet.numbers.red.map((num) => (
+                            <Ball 
+                              key={`r-${betIdx}-${num}`} 
+                              number={num} 
+                              type="red" 
+                              size="md" 
+                              matched={singleMatchResult.matchedRed.includes(num)} 
+                            />
+                          ))}
+                        </>
+                      ) : (
+                        bet.numbers.red.map((num, i) => (
+                          <Ball key={`r-${betIdx}-${i}`} number={num} type="red" size="md" matched={true} />
+                        ))
+                      )}
+                      
+                      {bet.numbers.blue.length > 0 && (
+                        <div className="w-px h-4 bg-gray-600 mx-0.5" />
+                      )}
+                      
+                      {/* 蓝球 */}
+                      {bet.numbers.blue.length > 0 ? (
+                        isMatched ? (
+                          <>
+                            {bet.numbers.blue.map((num) => (
+                              <Ball 
+                                key={`b-${betIdx}-${num}`} 
+                                number={num} 
+                                type="blue" 
+                                size="md" 
+                                matched={singleMatchResult.matchedBlue.includes(num)} 
+                              />
+                            ))}
+                          </>
+                        ) : (
+                          bet.numbers.blue.map((num, i) => (
+                            <Ball key={`b-${betIdx}-${i}`} number={num} type="blue" size="md" matched={true} />
+                          ))
+                        )
+                      ) : null}
+                    </div>
                   </div>
                 );
               })}
 
-              <div className="flex justify-between items-center text-xs pt-2 border-t border-gray-700">
+              {/* 显示开奖号码（仅已开奖） */}
+              {firstBetMatchResult && (
+                <div className="pt-2 mt-2 border-t border-gray-700">
+                  <p className="text-xs text-gray-400 mb-1.5 text-center">开奖号码</p>
+                  <div className="flex gap-1.5 flex-wrap items-center justify-center">
+                    {parseDrawNumbers(firstBetMatchResult.drawResult).red.map((num, i) => (
+                      <Ball key={`dr-${i}`} number={num} type="red" size="md" matched={true} />
+                    ))}
+                    {parseDrawNumbers(firstBetMatchResult.drawResult).blue.length > 0 && (
+                      <div className="w-px h-4 bg-gray-600 mx-0.5" />
+                    )}
+                    {parseDrawNumbers(firstBetMatchResult.drawResult).blue.map((num, i) => (
+                      <Ball key={`db-${i}`} number={num} type="blue" size="md" matched={true} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center text-xs pt-2 mt-2 border-t border-gray-700">
                 <div className="flex gap-2">
                   <span className="text-gray-400">{record.multiples}倍</span>
                   {record.isAppend && <span className="text-amber-400">追加</span>}
@@ -407,11 +460,6 @@ export default function Records() {
                   {record.wonAmount && (
                     <p className="text-green-400 font-medium">
                       +¥{formatMoney(record.wonAmount / record.issues)}
-                    </p>
-                  )}
-                  {totalPrize && !record.wonAmount && (
-                    <p className="text-amber-400 font-medium">
-                      {(matchResults[record.id] || []).filter(r => r.prize).length}注中奖
                     </p>
                   )}
                 </div>

@@ -181,7 +181,7 @@ function extractSimpleDigits(text: string, count: number, maxDigit: number): num
 
 /**
  * 从带圈数字格式的文本中提取号码
- * 格式示例：①0912131724+0506 → 红球 09 12 13 17 24，蓝球 05 06
+ * 格式示例：①05 08 27 30 35+01 09 ②04 07 08 27 33+02 03 → 两注大乐透
  */
 function extractByCircledFormat(
   rawText: string,
@@ -189,74 +189,67 @@ function extractByCircledFormat(
 ): { bets: BallNumbers[]; issueNumber: string | null } {
   const config = LOTTERY_CONFIGS[type];
 
-  // 以带圈数字为分隔符拆分文本
-  const parts = rawText.split(new RegExp(`[${CIRCLED_CHARS}]`));
-  const prefix = parts[0] || '';
-
-  // 尝试从文本前缀中提取期号（如 "第26052期"）
-  const issueMatch = prefix.match(/第(\d{5,})期/);
+  // 尝试从文本中提取期号
+  const issueMatch = rawText.match(/第(\d{5,})期/);
   const issueNumber = issueMatch ? issueMatch[1] : null;
 
   const bets: BallNumbers[] = [];
 
-  // 每个带圈数字后的文本对应一注
-  for (let i = 1; i < parts.length; i++) {
-    const segment = normalizeCircledNumbers(parts[i]);
-    const cleaned = segment
-      .replace(/[：:]/g, ':')
-      .replace(/[（）()]/g, ' ')
-      .replace(/[【】\[\]]/g, ' ')
-      .replace(/\n+/g, ' ')   // 将换行符替换为空格
-      .trim();
-
-    if (!cleaned) continue;
-
-    // 尝试找到红球和蓝球的分隔符（+号或空格分隔的两组数字）
-    const plusIdx = cleaned.search(/[+＋]/);
-    let redText = '';
-    let blueText = '';
-
-    if (plusIdx >= 0) {
-      // 有+号分隔，前面是红球、后面是蓝球
-      redText = cleaned.slice(0, plusIdx);
-      blueText = cleaned.slice(plusIdx + 1);
-    } else {
-      // 没有+号，按空格分割
-      const spaceParts = cleaned.trim().split(/\s+/);
-      
-      if (spaceParts.length >= 2) {
-        // 第一部分是红球（连续数字如 0912131724）
-        const firstPart = spaceParts[0];
-        const redNumsArray = extractValidNumbersUnsorted(firstPart, 1, config.redMax, config.redCount);
-        redText = redNumsArray.join(' ');
-        
-        // 蓝球是剩余部分的前几个数字
-        let blueParts = [];
-        for (let j = 1; j < spaceParts.length; j++) {
-          const part = spaceParts[j];
-          if (/^\d{1,2}$/.test(part)) {
-            blueParts.push(part);
-          } else {
-            break; // 遇到非数字文本，停止
-          }
-        }
-        blueText = blueParts.join(' ');
-      } else {
-        redText = cleaned;   // 只有一部分，全部作为红球
-        blueText = '';
-      }
+  // 第一步：使用带圈数字作为分隔符，分割文本
+  // 首先，我们需要找到所有带圈数字的位置
+  const circledPositions: number[] = [];
+  for (let i = 0; i < rawText.length; i++) {
+    const char = rawText[i];
+    if (CIRCLED_CHARS.includes(char)) {
+      circledPositions.push(i);
     }
+  }
 
-    const redNums = extractValidNumbers(redText, 1, config.redMax, config.redCount);
-    const blueNums = config.blueCount > 0
-      ? extractValidNumbers(blueText, 1, config.blueMax, config.blueCount)
-      : [];
-
-    if (
-      redNums.length === config.redCount &&
-      (config.blueCount === 0 || blueNums.length === config.blueCount)
-    ) {
-      bets.push({ red: redNums, blue: blueNums });
+  // 如果找到了带圈数字
+  if (circledPositions.length > 0) {
+    // 对于每一段带圈数字后面的内容
+    for (let i = 0; i < circledPositions.length; i++) {
+      const startPos = circledPositions[i] + 1;
+      const endPos = i < circledPositions.length - 1 ? circledPositions[i + 1] : rawText.length;
+      const segment = rawText.slice(startPos, endPos);
+      
+      // 处理这段内容
+      // 查找 + 号位置
+      const plusIndex = segment.indexOf('+');
+      let redText = '';
+      let blueText = '';
+      
+      if (plusIndex >= 0) {
+        // 有 + 号
+        redText = segment.slice(0, plusIndex);
+        blueText = segment.slice(plusIndex + 1);
+      } else {
+        // 没有 + 号，尝试查找其他分隔符
+        const plusIndex2 = segment.indexOf('＋');
+        if (plusIndex2 >= 0) {
+          redText = segment.slice(0, plusIndex2);
+          blueText = segment.slice(plusIndex2 + 1);
+        } else {
+          // 没有明显分隔符，尝试提取所有数字，前 config.redCount + config.blueCount 个
+          const allNums = extractValidNumbersUnsorted(segment, 1, Math.max(config.redMax, config.blueMax), 999);
+          if (allNums.length >= config.redCount + config.blueCount) {
+            const red = allNums.slice(0, config.redCount).sort((a, b) => a - b);
+            const blue = allNums.slice(config.redCount, config.redCount + config.blueCount).sort((a, b) => a - b);
+            bets.push({ red, blue });
+          }
+          continue;
+        }
+      }
+      
+      // 从 redText 中提取红球
+      const redNums = extractValidNumbers(redText, 1, config.redMax, config.redCount);
+      // 从 blueText 中提取蓝球
+      const blueNums = extractValidNumbers(blueText, 1, config.blueMax, config.blueCount);
+      
+      if (redNums.length === config.redCount && 
+          (config.blueCount === 0 || blueNums.length === config.blueCount)) {
+        bets.push({ red: redNums, blue: blueNums });
+      }
     }
   }
 
@@ -571,6 +564,46 @@ export function extractLotteryNumbers(text: string, type: LotteryType): ExtractR
         lotteryName,
         betType,
       };
+    }
+
+    // 带圈数字提取失败，尝试其他方法
+    const cleanText = normalizeCircledNumbers(rawText)
+      .replace(/[：:]/g, ':')
+      .replace(/[（）()]/g, ' ')
+      .replace(/[【】\[\]]/g, ' ')
+      .trim();
+    
+    let numbersList = extractMultiBet(type, cleanText);
+    if (numbersList.length === 0) {
+      const single = extractSingleBet(cleanText, type);
+      if (single) {
+        numbersList = [single];
+      }
+    }
+    
+    if (numbersList.length > 0) {
+      // 过滤有效号码
+      const validList = numbersList.filter(bet => {
+        const config = LOTTERY_CONFIGS[type];
+        const isValid = bet.red.length === config.redCount &&
+          (config.blueCount === 0 || bet.blue.length === config.blueCount) &&
+          bet.red.every(n => n >= 1 && n <= config.redMax) &&
+          bet.blue.every(n => n >= 1 && n <= config.blueMax);
+        
+        return isValid;
+      });
+      
+      if (validList.length > 0) {
+        return {
+          numbersList: validList,
+          rawText,
+          issueNumber: issueNumber || extractedIssueNumber,
+          valid: true,
+          lotteryCategory,
+          lotteryName,
+          betType,
+        };
+      }
     }
 
     return {
