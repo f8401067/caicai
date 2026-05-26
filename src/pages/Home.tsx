@@ -159,7 +159,7 @@ export default function Home() {
         }
       }
     } catch (error) {
-      // 静默失败
+      console.error('获取开奖数据失败:', error)
     }
   };
 
