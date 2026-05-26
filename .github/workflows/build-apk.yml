@@ -27,17 +27,13 @@ jobs:
           run_install: false
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build web app
         run: pnpm build
 
-      - name: Sync web assets to Android
-        run: |
-          mkdir -p android/app/src/main/assets/public
-          rm -rf android/app/src/main/assets/public/*
-          cp -r dist/* android/app/src/main/assets/public/
-          cp capacitor.config.ts android/app/src/main/assets/capacitor.config.json || true
+      - name: Capacitor sync Android
+        run: npx cap sync android
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
