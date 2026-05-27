@@ -27,6 +27,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
+  const [error, setError] = useState<string | null>(null);
   const observerRef = useRef<HTMLDivElement>(null);
   
   const {
@@ -106,6 +107,7 @@ export default function Home() {
       }
       
       if (listData.length === 0) {
+        console.warn('API返回数据为空或格式不符:', data);
         return;
       }
         
@@ -159,16 +161,19 @@ export default function Home() {
         }
       }
     } catch (error) {
-      console.error('获取开奖数据失败:', error)
+      console.error('获取开奖数据失败:', error);
+      setError(`加载失败: ${error instanceof Error ? error.message : '网络错误'}`);
     }
   };
 
   useEffect(() => {
+    setError(null);
     fetchHistory(1);
   }, [currentType]);
 
   const handleRefresh = () => {
     setLoading(true);
+    setError(null);
     setDisplayCount(PAGE_SIZE);
     fetchHistory(1, true).finally(() => setLoading(false));
   };
@@ -251,7 +256,17 @@ export default function Home() {
       </div>
 
       <div className="pb-16">
-        {displayHistory.length === 0 ? (
+        {error ? (
+          <div className="p-8 text-center">
+            <p className="text-red-400 text-sm mb-4">{error}</p>
+            <button
+              onClick={handleRefresh}
+              className="px-4 py-2 bg-amber-500 text-black rounded-lg text-sm font-medium hover:bg-amber-600"
+            >
+              重试
+            </button>
+          </div>
+        ) : displayHistory.length === 0 ? (
           <div className="p-8 text-center text-gray-400">
             <RefreshCcw className="w-8 h-8 mx-auto mb-2 animate-spin" />
             <p className="text-sm">加载中...</p>
